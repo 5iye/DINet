@@ -6,29 +6,17 @@ from scipy.io import wavfile
 from python_speech_features import mfcc
 import tensorflow as tf
 
-
 class DeepSpeech():
-    def __init__(self,model_path):
-        self.graph, self.logits_ph, self.input_node_ph, self.input_lengths_ph \
-            = self._prepare_deepspeech_net(model_path)
+    def __init__(self, model_path):
+        self.model = self._load_deepspeech_model(model_path)
         self.target_sample_rate = 16000
 
-    def _prepare_deepspeech_net(self,deepspeech_pb_path):
-        with tf.io.gfile.GFile(deepspeech_pb_path, "rb") as f:
-            graph_def = tf.compat.v1.GraphDef()
-            graph_def.ParseFromString(f.read())
-        graph = tf.compat.v1.get_default_graph()
-        tf.import_graph_def(graph_def, name="deepspeech")
-        logits_ph = graph.get_tensor_by_name("deepspeech/logits:0")
-        input_node_ph = graph.get_tensor_by_name("deepspeech/input_node:0")
-        input_lengths_ph = graph.get_tensor_by_name("deepspeech/input_lengths:0")
+    def _load_deepspeech_model(self, deepspeech_pb_path):
+        model = tf.saved_model.load(deepspeech_pb_path)
+        return model
 
-        return graph, logits_ph, input_node_ph, input_lengths_ph
+    def conv_audio_to_deepspeech_input_vector(self, audio, sample_rate, num_cepstrum, num_context):
 
-    def conv_audio_to_deepspeech_input_vector(self,audio,
-                                              sample_rate,
-                                              num_cepstrum,
-                                              num_context):
         # Get mfcc coefficients:
         features = mfcc(
             signal=audio,
@@ -64,8 +52,9 @@ class DeepSpeech():
 
         return train_inputs
 
-    def compute_audio_feature(self,audio_path):
+    def compute_audio_feature(self, audio_path):
         audio_sample_rate, audio = wavfile.read(audio_path)
+
         if audio.ndim != 1:
             warnings.warn(
                 "Audio has multiple channels, the first channel is used")
@@ -77,18 +66,16 @@ class DeepSpeech():
                 sr_new=self.target_sample_rate)
         else:
             resampled_audio = audio.astype(np.float)
-        with tf.compat.v1.Session(graph=self.graph) as sess:
-            input_vector = self.conv_audio_to_deepspeech_input_vector(
-                audio=resampled_audio.astype(np.int16),
-                sample_rate=self.target_sample_rate,
-                num_cepstrum=26,
-                num_context=9)
-            network_output = sess.run(
-                    self.logits_ph,
-                    feed_dict={
-                        self.input_node_ph: input_vector[np.newaxis, ...],
-                        self.input_lengths_ph: [input_vector.shape[0]]})
-            ds_features = network_output[::2,0,:]
+            
+        
+        input_vector = self.conv_audio_to_deepspeech_input_vector(
+            audio=resampled_audio.astype(np.int16),
+            sample_rate=self.target_sample_rate,
+            num_cepstrum=26,
+            num_context=9)
+
+        # TensorFlow 2.x style for running the model
+        ds_features = self.model(input_vector[np.newaxis, ...], training=False)
         return ds_features
 
 if __name__ == '__main__':
