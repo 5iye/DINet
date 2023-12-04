@@ -14,6 +14,8 @@ class DeepSpeech():
         self.model.allocate_tensors()
         self.target_sample_rate = 16000
         self.input_details = self.model.get_input_details()
+        input_shape = self.input_details[0]['shape']
+        print("Expected input shape:", input_shape)
         self.output_details = self.model.get_output_details()
 
     def conv_audio_to_deepspeech_input_vector(self,
@@ -72,6 +74,7 @@ class DeepSpeech():
 
         input_vector = self.conv_audio_to_deepspeech_input_vector(audio=resampled_audio.astype(np.int16), sample_rate=self.target_sample_rate, num_cepstrum=26, num_context=9)
         input_vector = input_vector.astype(np.float32)
+        print("Current input shape:", input_vector.shape)
         input_vector = np.expand_dims(input_vector, axis=0)
 
         # TensorFlow Lite 모델에 입력 설정
