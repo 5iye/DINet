@@ -11,7 +11,7 @@ import tensorflow as tf
 class DeepSpeech():
 
     def __init__(self, model_path):
-        self.model = tf.saved_model.load(model_path)
+        self.model = tf.keras.saving.load_model(model_path)
         self.target_sample_rate = 16000
 
     def conv_audio_to_deepspeech_input_vector(self,
