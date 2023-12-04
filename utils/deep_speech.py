@@ -72,6 +72,7 @@ class DeepSpeech():
 
         input_vector = self.conv_audio_to_deepspeech_input_vector(audio=resampled_audio.astype(np.int16), sample_rate=self.target_sample_rate, num_cepstrum=26, num_context=9)
         input_vector = input_vector.astype(np.float32)
+        input_vector = np.expand_dims(input_vector, axis=0)
 
         # TensorFlow Lite 모델에 입력 설정
         self.model.set_tensor(self.input_details[0]['index'], [input_vector])
