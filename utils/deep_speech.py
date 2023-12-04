@@ -6,17 +6,19 @@ from scipy.io import wavfile
 from python_speech_features import mfcc
 import tensorflow as tf
 
+
+
 class DeepSpeech():
+
     def __init__(self, model_path):
-        self.model = self._load_deepspeech_model(model_path)
+        self.model = tf.saved_model.load(model_path)
         self.target_sample_rate = 16000
 
-    def _load_deepspeech_model(self, deepspeech_pb_path):
-        model = tf.saved_model.load(deepspeech_pb_path)
-        return model
-
-    def conv_audio_to_deepspeech_input_vector(self, audio, sample_rate, num_cepstrum, num_context):
-
+    def conv_audio_to_deepspeech_input_vector(self,
+                                              audio,
+                                              sample_rate,
+                                              num_cepstrum,
+                                              num_context):
         # Get mfcc coefficients:
         features = mfcc(
             signal=audio,
@@ -52,9 +54,8 @@ class DeepSpeech():
 
         return train_inputs
 
-    def compute_audio_feature(self, audio_path):
+    def compute_audio_feature(self,audio_path):
         audio_sample_rate, audio = wavfile.read(audio_path)
-
         if audio.ndim != 1:
             warnings.warn(
                 "Audio has multiple channels, the first channel is used")
@@ -66,16 +67,10 @@ class DeepSpeech():
                 sr_new=self.target_sample_rate)
         else:
             resampled_audio = audio.astype(np.float)
-            
-        
-        input_vector = self.conv_audio_to_deepspeech_input_vector(
-            audio=resampled_audio.astype(np.int16),
-            sample_rate=self.target_sample_rate,
-            num_cepstrum=26,
-            num_context=9)
 
-        # TensorFlow 2.x style for running the model
-        ds_features = self.model(input_vector[np.newaxis, ...], training=False)
+        input_vector = self.conv_audio_to_deepspeech_input_vector(audio=resampled_audio.astype(np.int16), sample_rate=self.target_sample_rate, num_cepstrum=26, num_context=9)
+
+        ds_features = self.model(input_vector)
         return ds_features
 
 if __name__ == '__main__':
@@ -84,3 +79,4 @@ if __name__ == '__main__':
     DSModel = DeepSpeech(model_path)
     ds_feature = DSModel.compute_audio_feature(audio_path)
     print(ds_feature)
+
