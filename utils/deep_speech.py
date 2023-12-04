@@ -8,18 +8,27 @@ import tensorflow as tf
 
 
 class DeepSpeech():
-
-    def __init__(self, model_path):
-        self.model = tf.lite.Interpreter(model_path)
-        self.model.allocate_tensors()
+    def __init__(self,model_path):
+        self.graph, self.logits_ph, self.input_node_ph, self.input_lengths_ph \
+            = self._prepare_deepspeech_net(model_path)
         self.target_sample_rate = 16000
-        self.input_details = self.model.get_input_details()
-        input_shape = self.input_details[0]['shape']
-        print("Expected input shape:", input_shape)
-        self.output_details = self.model.get_output_details()
 
-    def conv_audio_to_deepspeech_input_vector(self,
-                                              audio,
+    def _prepare_deepspeech_net(self,deepspeech_pb_path):
+
+        graph_def = tf.compat.v1.GraphDef()
+        loaded = graph_def.ParseFromString(open(deepspeech_pb_path,'rb').read())
+
+        tf.graph_util.import_graph_def(graph_def, name="deepspeech")
+
+        graph = tf.Graph()
+        
+        logits_ph = graph.get_tensor_by_name("deepspeech/logits:0")
+        input_node_ph = graph.get_tensor_by_name("deepspeech/input_node:0")
+        input_lengths_ph = graph.get_tensor_by_name("deepspeech/input_lengths:0")
+
+        return graph, logits_ph, input_node_ph, input_lengths_ph
+
+    def conv_audio_to_deepspeech_input_vector(self,audio,
                                               sample_rate,
                                               num_cepstrum,
                                               num_context):
@@ -71,20 +80,19 @@ class DeepSpeech():
                 sr_new=self.target_sample_rate)
         else:
             resampled_audio = audio.astype(np.float)
-
-        input_vector = self.conv_audio_to_deepspeech_input_vector(audio=resampled_audio.astype(np.int16), sample_rate=self.target_sample_rate, num_cepstrum=26, num_context=9)
-        input_vector = input_vector.astype(np.float32)
-        print("Current input shape:", input_vector.shape)
-        input_vector = np.expand_dims(input_vector, axis=0)
-
-        # TensorFlow Lite 모델에 입력 설정
-        self.model.set_tensor(self.input_details[0]['index'], [input_vector])
-        self.model.invoke()
-
-        # 결과 가져오기
-        ds_features = self.model.get_tensor(self.output_details[0]['index'])
+        with tf.compat.v1.Session(graph=self.graph) as sess:
+            input_vector = self.conv_audio_to_deepspeech_input_vector(
+                audio=resampled_audio.astype(np.int16),
+                sample_rate=self.target_sample_rate,
+                num_cepstrum=26,
+                num_context=9)
+            network_output = sess.run(
+                    self.logits_ph,
+                    feed_dict={
+                        self.input_node_ph: input_vector[np.newaxis, ...],
+                        self.input_lengths_ph: [input_vector.shape[0]]})
+            ds_features = network_output[::2,0,:]
         return ds_features
-
 
 if __name__ == '__main__':
     audio_path = r'./00168.wav'
@@ -92,4 +100,6 @@ if __name__ == '__main__':
     DSModel = DeepSpeech(model_path)
     ds_feature = DSModel.compute_audio_feature(audio_path)
     print(ds_feature)
+
+
 
