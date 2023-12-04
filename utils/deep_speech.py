@@ -7,12 +7,14 @@ from python_speech_features import mfcc
 import tensorflow as tf
 
 
-
 class DeepSpeech():
 
     def __init__(self, model_path):
-        self.model = tf.saved_model.load(model_path)
+        self.model = tf.lite.Interpreter(model_path)
+        self.model.allocate_tensors()
         self.target_sample_rate = 16000
+        self.input_details = self.model.get_input_details()
+        self.output_details = self.model.get_output_details()
 
     def conv_audio_to_deepspeech_input_vector(self,
                                               audio,
@@ -70,8 +72,14 @@ class DeepSpeech():
 
         input_vector = self.conv_audio_to_deepspeech_input_vector(audio=resampled_audio.astype(np.int16), sample_rate=self.target_sample_rate, num_cepstrum=26, num_context=9)
 
-        ds_features = self.model(input_vector)
+        # TensorFlow Lite 모델에 입력 설정
+        self.model.set_tensor(self.input_details[0]['index'], [input_vector])
+        self.model.invoke()
+
+        # 결과 가져오기
+        ds_features = self.model.get_tensor(self.output_details[0]['index'])
         return ds_features
+
 
 if __name__ == '__main__':
     audio_path = r'./00168.wav'
