@@ -4,7 +4,8 @@ import warnings
 import resampy
 from scipy.io import wavfile
 from python_speech_features import mfcc
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 
 
 class DeepSpeech():
@@ -14,14 +15,11 @@ class DeepSpeech():
         self.target_sample_rate = 16000
 
     def _prepare_deepspeech_net(self,deepspeech_pb_path):
-
-        graph_def = tf.compat.v1.GraphDef()
-        loaded = graph_def.ParseFromString(open(deepspeech_pb_path,'rb').read())
-
-        tf.graph_util.import_graph_def(graph_def, name="deepspeech")
-
-        graph = tf.Graph()
-        
+        with tf.io.gfile.GFile(deepspeech_pb_path, "rb") as f:
+            graph_def = tf.compat.v1.GraphDef()
+            graph_def.ParseFromString(f.read())
+        graph = tf.compat.v1.get_default_graph()
+        tf.import_graph_def(graph_def, name="deepspeech")
         logits_ph = graph.get_tensor_by_name("deepspeech/logits:0")
         input_node_ph = graph.get_tensor_by_name("deepspeech/input_node:0")
         input_lengths_ph = graph.get_tensor_by_name("deepspeech/input_lengths:0")
@@ -100,6 +98,3 @@ if __name__ == '__main__':
     DSModel = DeepSpeech(model_path)
     ds_feature = DSModel.compute_audio_feature(audio_path)
     print(ds_feature)
-
-
-
