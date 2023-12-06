@@ -3,8 +3,7 @@ import warnings
 import resampy
 from scipy.io import wavfile
 from python_speech_features import mfcc
-import tensorflow.compat.v1 as tf
-tf.disable_v2_behavior()
+import tensorflow as tf
 
 initial_state_c = np.zeros([1, 2048], dtype=np.float32)
 initial_state_h = np.zeros([1, 2048], dtype=np.float32)
@@ -63,8 +62,10 @@ class DeepSpeech():
         train_inputs = np.copy(train_inputs)
         train_inputs = (train_inputs - np.mean(train_inputs)) / \
                        np.std(train_inputs)
+        
+        train_inputs = train_inputs[np.newaxis, ...]    # (1, 502, 19, 26)
 
-        return train_inputs[:16,:,:]
+        return train_inputs
 
     def compute_audio_feature(self,audio_path):
         audio_sample_rate, audio = wavfile.read(audio_path)
@@ -79,19 +80,28 @@ class DeepSpeech():
                 sr_new=self.target_sample_rate)
         else:
             resampled_audio = audio.astype(np.float)
+        
         with tf.compat.v1.Session(graph=self.graph) as sess:
             input_vector = self.conv_audio_to_deepspeech_input_vector(
                 audio=resampled_audio.astype(np.int16),
                 sample_rate=self.target_sample_rate,
                 num_cepstrum=26,
-                num_context=9)
-            network_output = sess.run(
-                    self.logits_ph,
-                    feed_dict={
-                        self.input_node_ph: input_vector[np.newaxis, ...],
-                        self.input_lengths_ph: [input_vector.shape[0]],
-                        'deepspeech/previous_state_c:0': initial_state_c,
-                        'deepspeech/previous_state_h:0': initial_state_h,
-                        })
-            ds_features = network_output[::2,0,:]
+                num_context=9)   # (1, 502, 19, 26)
+            
+            start, step = 0, 16
+            max_time_steps = input_vector.shape[1]
+
+            while (start + step) < max_time_steps:
+                infer_vector = input_vector[:, start:(start + step), :, :]
+                network_output = sess.run(
+                        self.logits_ph,
+                        feed_dict={
+                            self.input_node_ph: infer_vector,
+                            self.input_lengths_ph: [infer_vector.shape[1]],
+                            'deepspeech/previous_state_c:0': initial_state_c,
+                            'deepspeech/previous_state_h:0': initial_state_h,
+                            })
+                ds_feat_chunk = network_output[::2,0,:]   # (8, 29)
+                ds_features = np.concatenate((ds_feat_chunk,ds_features),axis=0)
+                
         return ds_features
