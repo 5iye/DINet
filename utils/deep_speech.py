@@ -6,13 +6,14 @@ from python_speech_features import mfcc
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior()
 
-initial_state_c = np.zeros([1, 2048], dtype=np.float32)
-initial_state_h = np.zeros([1, 2048], dtype=np.float32)
+
 
 class DeepSpeech():
     def __init__(self,model_path):
         self.graph, self.logits_ph, self.input_node_ph, self.input_lengths_ph \
             = self._prepare_deepspeech_net(model_path)
+        self.initial_state_c = np.zeros([1, 2048], dtype=np.float32)
+        self.initial_state_h = np.zeros([1, 2048], dtype=np.float32)
         self.target_sample_rate = 16000
 
     def _prepare_deepspeech_net(self,deepspeech_pb_path):
@@ -80,7 +81,7 @@ class DeepSpeech():
                 sr_new=self.target_sample_rate)
         else:
             resampled_audio = audio.astype(np.float)
-        with tf.compat.v1.Session(graph=self.graph, config=tf.compat.v1.ConfigProto(gpu_options=tf.compat.v1.GPUOptions(allow_growth=True))) as sess:
+        with tf.compat.v1.Session(graph=self.graph) as sess:
             input_vector = self.conv_audio_to_deepspeech_input_vector(
                 audio=resampled_audio.astype(np.int16),
                 sample_rate=self.target_sample_rate,
@@ -93,18 +94,22 @@ class DeepSpeech():
 
             while (start + step) < max_time_steps:
                 infer_vector = input_vector[:, start:(start + step), :, :]
-                network_output = sess.run(
-                        self.logits_ph,
+                output, new_state_c, new_state_h, network_output = sess.run(
+                        [self.logits_ph, 'deepspeech/new_state_c:0', 'deepspeech/new_state_h:0'],
                         feed_dict={
                             self.input_node_ph: infer_vector,
                             self.input_lengths_ph: [infer_vector.shape[1]],
-                            'deepspeech/previous_state_c:0': initial_state_c,
-                            'deepspeech/previous_state_h:0': initial_state_h,
+                            'deepspeech/previous_state_c:0': self.initial_state_c,
+                            'deepspeech/previous_state_h:0': self.initial_state_h,
                             })
+                # c, h 업데이트
+                self.initial_state_c = new_state_c
+                self.initial_state_h = new_state_h
+
                 ds_feat_chunk = network_output[::2,0,:]   # (8, 29)
                 ds_features_list.append(ds_feat_chunk)
-                start += step
 
         ds_features = np.vstack(ds_features_list)
 
         return ds_features
+    
