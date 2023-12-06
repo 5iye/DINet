@@ -3,6 +3,7 @@ import warnings
 import resampy
 from scipy.io import wavfile
 from python_speech_features import mfcc
+# 1버전으로 고정
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior()
 
@@ -88,14 +89,16 @@ class DeepSpeech():
                 num_cepstrum=26,
                 num_context=9)
             
-            start, step = 0, 16
+            start, step = 0, 16   # <- 모델 input (1, 16, 19, 26)
             max_time_steps = input_vector.shape[1]
             ds_features_list = []
 
             while (start + step) < max_time_steps:
                 infer_vector = input_vector[:, start:(start + step), :, :]
                 output, new_state_c, new_state_h = sess.run(
+                        # 모델 파라미터
                         [self.logits_ph, 'deepspeech/new_state_c:0', 'deepspeech/new_state_h:0'],
+                        # 모델 input 
                         feed_dict={
                             self.input_node_ph: infer_vector,
                             self.input_lengths_ph: [infer_vector.shape[1]],
@@ -109,7 +112,8 @@ class DeepSpeech():
                 ds_feat_chunk = output[::2,0,:]   # (8, 29)
                 ds_features_list.append(ds_feat_chunk)
                 start += step
-
+                
+        # array 행 추가
         ds_features = np.vstack(ds_features_list)
 
         return ds_features
