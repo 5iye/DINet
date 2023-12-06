@@ -3,7 +3,8 @@ import warnings
 import resampy
 from scipy.io import wavfile
 from python_speech_features import mfcc
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 
 initial_state_c = np.zeros([1, 2048], dtype=np.float32)
 initial_state_h = np.zeros([1, 2048], dtype=np.float32)
@@ -20,7 +21,7 @@ class DeepSpeech():
             graph_def.ParseFromString(f.read())
         graph = tf.compat.v1.get_default_graph()
         tf.import_graph_def(graph_def, name="deepspeech")
-        logits_ph = graph.get_tensor_by_name("deepspeech/logits")
+        logits_ph = graph.get_tensor_by_name("deepspeech/logits:0")
         input_node_ph = graph.get_tensor_by_name("deepspeech/input_node:0")
         input_lengths_ph = graph.get_tensor_by_name("deepspeech/input_lengths:0")
 
@@ -62,7 +63,6 @@ class DeepSpeech():
         train_inputs = np.copy(train_inputs)
         train_inputs = (train_inputs - np.mean(train_inputs)) / \
                        np.std(train_inputs)
-        
         train_inputs = train_inputs[np.newaxis, ...]    # (1, 502, 19, 26)
 
         return train_inputs
@@ -80,16 +80,16 @@ class DeepSpeech():
                 sr_new=self.target_sample_rate)
         else:
             resampled_audio = audio.astype(np.float)
-        
-        with tf.compat.v1.Session(graph=self.graph) as sess:
+        with tf.compat.v1.Session(graph=self.graph, config=tf.compat.v1.ConfigProto(gpu_options=tf.compat.v1.GPUOptions(allow_growth=True))) as sess:
             input_vector = self.conv_audio_to_deepspeech_input_vector(
                 audio=resampled_audio.astype(np.int16),
                 sample_rate=self.target_sample_rate,
                 num_cepstrum=26,
-                num_context=9)   # (1, 502, 19, 26)
+                num_context=9)
             
             start, step = 0, 16
             max_time_steps = input_vector.shape[1]
+            ds_features_list = []
 
             while (start + step) < max_time_steps:
                 infer_vector = input_vector[:, start:(start + step), :, :]
@@ -102,6 +102,9 @@ class DeepSpeech():
                             'deepspeech/previous_state_h:0': initial_state_h,
                             })
                 ds_feat_chunk = network_output[::2,0,:]   # (8, 29)
-                ds_features = np.concatenate((ds_feat_chunk,ds_features),axis=0)
-                
+                ds_features_list.append(ds_feat_chunk)
+                start += step
+
+        ds_features = np.vstack(ds_features_list)
+
         return ds_features
