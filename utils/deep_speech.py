@@ -1,4 +1,3 @@
-
 import numpy as np
 import warnings
 import resampy
@@ -7,6 +6,8 @@ from python_speech_features import mfcc
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior()
 
+initial_state_c = np.zeros([1, 2048], dtype=np.float32)
+initial_state_h = np.zeros([1, 2048], dtype=np.float32)
 
 class DeepSpeech():
     def __init__(self,model_path):
@@ -57,13 +58,13 @@ class DeepSpeech():
             writeable=False)
 
         # Flatten the second and third dimensions:
-        train_inputs = np.reshape(train_inputs, [num_strides, -1])
+        # train_inputs = np.reshape(train_inputs, [num_strides, -1])
 
         train_inputs = np.copy(train_inputs)
         train_inputs = (train_inputs - np.mean(train_inputs)) / \
                        np.std(train_inputs)
 
-        return train_inputs
+        return train_inputs[:16,:,:]
 
     def compute_audio_feature(self,audio_path):
         audio_sample_rate, audio = wavfile.read(audio_path)
@@ -88,13 +89,9 @@ class DeepSpeech():
                     self.logits_ph,
                     feed_dict={
                         self.input_node_ph: input_vector[np.newaxis, ...],
-                        self.input_lengths_ph: [input_vector.shape[0]]})
+                        self.input_lengths_ph: [input_vector.shape[0]],
+                        'deepspeech/previous_state_c:0': initial_state_c,
+                        'deepspeech/previous_state_h:0': initial_state_h,
+                        })
             ds_features = network_output[::2,0,:]
         return ds_features
-
-if __name__ == '__main__':
-    audio_path = r'./00168.wav'
-    model_path = r'./output_graph.pb'
-    DSModel = DeepSpeech(model_path)
-    ds_feature = DSModel.compute_audio_feature(audio_path)
-    print(ds_feature)
