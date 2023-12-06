@@ -94,7 +94,7 @@ class DeepSpeech():
 
             while (start + step) < max_time_steps:
                 infer_vector = input_vector[:, start:(start + step), :, :]
-                output, new_state_c, new_state_h, network_output = sess.run(
+                output, new_state_c, new_state_h = sess.run(
                         [self.logits_ph, 'deepspeech/new_state_c:0', 'deepspeech/new_state_h:0'],
                         feed_dict={
                             self.input_node_ph: infer_vector,
@@ -106,7 +106,7 @@ class DeepSpeech():
                 self.initial_state_c = new_state_c
                 self.initial_state_h = new_state_h
 
-                ds_feat_chunk = network_output[::2,0,:]   # (8, 29)
+                ds_feat_chunk = output[::2,0,:]   # (8, 29)
                 ds_features_list.append(ds_feat_chunk)
 
         ds_features = np.vstack(ds_features_list)
