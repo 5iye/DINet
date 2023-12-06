@@ -108,6 +108,7 @@ class DeepSpeech():
 
                 ds_feat_chunk = output[::2,0,:]   # (8, 29)
                 ds_features_list.append(ds_feat_chunk)
+                start += step
 
         ds_features = np.vstack(ds_features_list)
 
